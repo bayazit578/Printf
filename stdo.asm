@@ -7,7 +7,7 @@ segment         .text
 
 %macro          mDISPLAY_STR 2
          
-                mov     rsi, %1
+                lea     rsi, [%1]
                 mov     rax, 1 
                 mov     rdi, 0 
                 mov     rdx, %2 
@@ -48,7 +48,7 @@ print_f:        pop     rax
                 mov     [saved_regs + saved.rax], rax
 
 
-                call    printf
+                call    printf wrt ..plt
 
                 mov     rdi, [saved_regs + saved.rdi]
                 mov     rsi, [saved_regs + saved.rsi]
@@ -73,7 +73,7 @@ print_f:        pop     rax
                 mov     rsi, [rbp + r8]
                 add     r8, STACK_STEP
 
-                mov     r9, buf                   ; r9 - buf to display text
+                lea     r9, [buf]                   ; r9 - buf to display text
 
             .read_loop:
                 cmp     byte [rsi], '%'
@@ -86,14 +86,15 @@ print_f:        pop     rax
                 inc     rsi
                 inc     r9
 
-                cmp     r9, buf_end
+                lea     r15, [buf_end]
+                cmp     r9, r15
                 jne     .read_loop
 
                 mov     rbx, rsi
                 mDISPLAY_BUF BUF_LEN
                 mov     rsi, rbx
                 
-                mov     r9, buf
+                lea     r9, [buf]
 
                 jmp     .read_loop
 
@@ -103,7 +104,8 @@ print_f:        pop     rax
                 mov     al, [rsi]
                 sub     al, 'b'
                 mov     rbx, [rbp + r8]
-                jmp     [jmp_table + rax*8]
+                lea     r15, [jmp_table]
+                jmp     [r15 + rax*8]
             .spec_end:
                 inc     rsi
                 add     r8, STACK_STEP
@@ -111,9 +113,11 @@ print_f:        pop     rax
                 jne     .read_loop
 
             .display_n_exit:
-                cmp     r9, buf
+                lea     r15, [buf]
+                cmp     r9, r15
                 je      .terminate 
-                sub     r9, buf
+                lea     r15, [buf]
+                sub     r9, r15
                 mDISPLAY_BUF r9
 
             .terminate:
@@ -148,10 +152,11 @@ print_f:        pop     rax
                 call    convert_2_pow
                 jmp     .spec_end
 
-.to_str:        sub     r9, buf
+.to_str:        lea     r15, [buf]
+                sub     r9, r15
                 mov     r12, rsi
                 mDISPLAY_BUF r9
-                mov     r9, buf
+                lea     r9, [buf]
 
                 mov     rdi, rbx
                 xor     al, al
@@ -184,13 +189,14 @@ print_f:        pop     rax
                 shl     r13, cl
                 not     r13
 
-                mov     rdi, inter_buf
+                lea     rdi, [inter_buf]
                 xor     r12, r12
                
             .inter_loop:
                 mov     rax, rbx
                 and     rax, r13
-                mov     al, [hex_table + rax]
+                lea     r15, [hex_table]
+                mov     al, [r15 + rax]
                 shr     rbx, cl
 
                 inc     r12
@@ -208,13 +214,14 @@ print_f:        pop     rax
                 dec     rdi
                 inc     r9
 
-                cmp     r9, buf_end
+                lea     r15, [buf_end]
+                cmp     r9, r15
                 jne     .end_loop2
 
                 mov     r10, rsi 
                 mDISPLAY_BUF BUF_LEN
                 mov     rsi, r10
-                mov     r9, buf
+                lea     r9, [buf]
             .end_loop2:
                 loop    .final_loop
                 ret
