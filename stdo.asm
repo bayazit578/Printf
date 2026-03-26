@@ -23,23 +23,41 @@ segment         .text
 
 global          print_f
 extern          printf
+default rel
             
 ;-----------------------------------------------------------
 ; Descr: print_f display text according to a format string
 ;
 ; Entry: RDI - pointer to format string (null-terminated)
-;        RSI - number of arguments (unused)
 ;
-; Assum: Arguments are passed on stack after return address
-;        Format string contains %b specifier for binary output
+; Assum: Format string contains %b specifier for binary 
+;        output
 ;
-; Exit:  None (output to stdout)
+; Exit:  Output to stdout
 ;
 ; Destr: RAX, RBX, RCX, RSI, RDI, RDX
 ;-----------------------------------------------------------
 
-print_f:        ;call    printf
-                pop     rax
+print_f:        pop     rax
+                mov     [saved_regs + saved.rdi], rdi
+                mov     [saved_regs + saved.rsi], rsi
+                mov     [saved_regs + saved.rdx], rdx
+                mov     [saved_regs + saved.rcx], rcx
+                mov     [saved_regs + saved.r8], r8
+                mov     [saved_regs + saved.r9], r9
+                mov     [saved_regs + saved.rax], rax
+
+
+                call    printf
+
+                mov     rdi, [saved_regs + saved.rdi]
+                mov     rsi, [saved_regs + saved.rsi]
+                mov     rdx, [saved_regs + saved.rdx]
+                mov     rcx, [saved_regs + saved.rcx]
+                mov     r8, [saved_regs + saved.r8]
+                mov     r9, [saved_regs + saved.r9]
+                mov     rax, [saved_regs + saved.rax]
+
                 push    r9 
                 push    r8 
                 push    rcx 
@@ -85,7 +103,8 @@ print_f:        ;call    printf
                 mov     al, [rsi]
                 sub     al, 'b'
                 mov     rbx, [rbp + r8]
-                call    [jmp_table + rax*8]
+                jmp     [jmp_table + rax*8]
+            .spec_end:
                 inc     rsi
                 add     r8, STACK_STEP
                 cmp     byte [rsi], 0
@@ -104,54 +123,74 @@ print_f:        ;call    printf
                 push    rax
                 ret
 
-.to_bin:        lzcnt   rcx, rbx
-                sub     rcx, REG_BITS
-                neg     rcx
-                dec     cl
-                ror     rbx, cl
-                inc     cl
-
-            .bin_loop:
-                mov     rax, rbx
-                and     rax, 1
-                add     rax, '0'
-                rol     rbx, 1
-
-                mov     [r9], rax 
-                inc     r9
-
-                cmp     r9, buf_end
-                jne     .end_loop1
-
-                mov     r10, rsi 
-                mDISPLAY_BUF BUF_LEN
-                mov     rsi, r10
-                mov     r9, buf
-            .end_loop1:
-                loop    .bin_loop
-                ret
+.to_bin:        mov     rcx, 1
+                call    convert_2_pow
+                jmp     .spec_end
 
 .to_char:       mov     rbx, [rbp + r8]
                 mov     [r9], rbx
                 inc     r9
-                ret
+                jmp     .spec_end
 
 .to_dec:        lzcnt   rcx, rbx
                 sub     rcx, REG_BITS
                 neg     rcx
                 shl     rcx, 2
-                ret
+                jmp     .spec_end
 
 .to_float:
 
-.to_oct:        mov     cl, 3
+.to_oct:        mov     rcx, 3
+                call    convert_2_pow
+                jmp     .spec_end
+
+.to_hex:        mov     rcx, 4
+                call    convert_2_pow
+                jmp     .spec_end
+
+.to_str:        sub     r9, buf
+                mov     r12, rsi
+                mDISPLAY_BUF r9
+                mov     r9, buf
+
+                mov     rdi, rbx
+                xor     al, al
+                mov     rcx, -1
+                repne   scasb
+                not     rcx
+                dec     rcx
+                mDISPLAY_STR rbx, rcx
+                mov     rsi, r12
+                jmp     .spec_end
+
+;-----------------------------------------------------------
+; Descr: convert_2_pow converts a number to a string in a 
+;        given base that is a power of 2
+;
+; Entry: RBX - number to convert
+;        RCX - exponent for base (base = 2^RCX)
+;        R9  - pointer to output buffer
+;        RSI - pointer to format string (used for buffer flush)
+;
+; Assum:
+;
+; Exit:  R9  -> updated position in output buffer
+;        Output buffer contains the converted number
+;
+; Destr: RAX, RCX, RDI, R10, R12, R13
+;-----------------------------------------------------------
+
+ convert_2_pow: mov     r13, -1
+                shl     r13, cl
+                not     r13
+
                 mov     rdi, inter_buf
                 xor     r12, r12
                
             .inter_loop:
                 mov     rax, rbx
-                and     rax, 0x7
-                add     rax, '0'
+                and     rax, r13
+                mov     al, [hex_table + rax]
                 shr     rbx, cl
 
                 inc     r12
@@ -171,59 +210,13 @@ print_f:        ;call    printf
 
                 cmp     r9, buf_end
                 jne     .end_loop2
-                
+
                 mov     r10, rsi 
                 mDISPLAY_BUF BUF_LEN
                 mov     rsi, r10
                 mov     r9, buf
             .end_loop2:
                 loop    .final_loop
-                ret
-
-.to_hex:        lzcnt   rcx, rbx
-                sub     rcx, REG_BITS
-                neg     rcx
-                dec     cl
-                ror     rbx, cl
-                inc     cl
-                shr     rcx, 2
-                inc     rcx
-
-            .hex_loop:
-                mov     rax, rbx
-                and     rax, 0xf
-                mov     al, [hex_table + rax]
-                rol     rbx, 4
-
-                mov     [r9], rax 
-                inc     r9
-
-                cmp     r9, buf_end
-                jne     .end_loop3
-                
-                mov     r10, rsi 
-                mDISPLAY_BUF BUF_LEN
-                mov     rsi, r10
-                mov     r9, buf
-
-            .end_loop3:                
-                loop    .hex_loop
-                ret
-
-.to_str:        sub     r9, buf
-                mov     r12, rsi
-                mDISPLAY_BUF r9
-                mov     rsi, r12
-
-                mov     rdi, rbx
-                xor     al, al
-                mov     rcx, -1
-                repne   scasb
-                not     rcx
-                dec     rcx
-                mov     r12, rsi
-                mDISPLAY_STR rbx, rcx
-                mov     rsi, r12
                 ret
 
 section         .data
@@ -244,5 +237,19 @@ inter_buf           times 8 dq 0
 
 buf             db  BUF_LEN dup(0)
 buf_end:
+
+saved_regs:     times 7 dq 0
+
+struc           saved
+
+  .rdi:         resq    1 
+  .rsi:         resq    1
+  .rdx:         resq    1 
+  .rcx:         resq    1
+  .r8:          resq    1
+  .r9:          resq    1
+  .rax:         resq    1
+
+endstruc
 
 hex_table       db  "0123456789abcdf"
