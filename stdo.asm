@@ -5,37 +5,24 @@ segment         .text
 %define         REG_BITS 64
 %define         QUADRO_BYTES 8
 
-%macro          display_str 0
-
-                mov     rax, 1
+%macro          mDISPLAY_STR 2
+         
+                mov     rsi, %1
+                mov     rax, 1 
                 mov     rdi, 0 
-                mov     rdx, 1 
+                mov     rdx, %2 
                 syscall
 %endmacro
+                
 
 %macro          mDISPLAY_BUF 1
 
-                mov     rsi, buf 
-                mov     rax, 1 
-                mov     rdi, 0 
-                mov     rdx, %1
-                syscall
+                mDISPLAY_STR buf, %1                
 %endmacro
 
-global print_f
 
-; global _start
-;
-; _start:         lea     rdi, test_str
-;                 mov     rsi, 0b00001101
-;                 mov     rdx, 'c'
-;                 mov     rcx, 0x148
-;                 mov     r8, 0x8
-;                 call    print_f
-;
-;                 mov     rax, 0x3c
-;                 xor     rdi, rdi
-;                 syscall
+global          print_f
+extern          printf
             
 ;-----------------------------------------------------------
 ; Descr: print_f display text according to a format string
@@ -51,7 +38,8 @@ global print_f
 ; Destr: RAX, RBX, RCX, RSI, RDI, RDX
 ;-----------------------------------------------------------
 
-print_f:        pop     rax
+print_f:        ;call    printf
+                pop     rax
                 push    r9 
                 push    r8 
                 push    rcx 
@@ -63,7 +51,7 @@ print_f:        pop     rax
                 push    rbp
                 mov     rbp, rsp
 
-                mov     r8, STACK_STEP*2                   ; r8 - offset of arg in stack
+                mov     r8, STACK_STEP*2          ; r8 - offset of arg in stack
                 mov     rsi, [rbp + r8]
                 add     r8, STACK_STEP
 
@@ -98,6 +86,7 @@ print_f:        pop     rax
                 sub     al, 'b'
                 mov     rbx, [rbp + r8]
                 call    [jmp_table + rax*8]
+                inc     rsi
                 add     r8, STACK_STEP
                 cmp     byte [rsi], 0
                 jne     .read_loop
@@ -140,14 +129,11 @@ print_f:        pop     rax
                 mov     r9, buf
             .end_loop1:
                 loop    .bin_loop
-
-                inc     rsi
                 ret
 
 .to_char:       mov     rbx, [rbp + r8]
                 mov     [r9], rbx
                 inc     r9
-                inc     rsi
                 ret
 
 .to_dec:        lzcnt   rcx, rbx
@@ -192,8 +178,6 @@ print_f:        pop     rax
                 mov     r9, buf
             .end_loop2:
                 loop    .final_loop
-                
-                inc     rsi
                 ret
 
 .to_hex:        lzcnt   rcx, rbx
@@ -223,12 +207,24 @@ print_f:        pop     rax
                 mov     r9, buf
 
             .end_loop3:                
-                loop    .hex_loop       
-                
-                inc     rsi
+                loop    .hex_loop
                 ret
 
-.to_str:
+.to_str:        sub     r9, buf
+                mov     r12, rsi
+                mDISPLAY_BUF r9
+                mov     rsi, r12
+
+                mov     rdi, rbx
+                xor     al, al
+                mov     rcx, -1
+                repne   scasb
+                not     rcx
+                dec     rcx
+                mov     r12, rsi
+                mDISPLAY_STR rbx, rcx
+                mov     rsi, r12
+                ret
 
 section         .data
 
@@ -250,5 +246,3 @@ buf             db  BUF_LEN dup(0)
 buf_end:
 
 hex_table       db  "0123456789abcdf"
-
-test_str        db  "gay %b%c %x %o", 0
