@@ -205,7 +205,6 @@ print_f:        pop     rax
                 inc     rdi
                 cmp     rbx, 0
                 jne     .inter_loop
-
                 dec     rdi
                 mov     rcx, r12
             .final_loop:
