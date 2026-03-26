@@ -2,5 +2,5 @@
 
 mkdir -p compiled
 nasm -g -f elf64 -l compiled/stdo.lst stdo.asm -o compiled/stdo.o
-ld -o compiled/stdo compiled/stdo.o
-./compiled/stdo
+gcc -g -no-pie -o compiled/print_f test.cpp compiled/stdo.o
+./compiled/print_f
