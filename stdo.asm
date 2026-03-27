@@ -1,6 +1,6 @@
 segment         .text
 
-%define         BUF_LEN 128
+%define         BUF_LEN 256
 %define         STACK_STEP 8
 %define         REG_BITS 64
 %define         QUADRO_BYTES 8
@@ -13,7 +13,7 @@ segment         .text
                 mov     rdx, %2 
                 syscall
 %endmacro
-                
+
 
 %macro          mDISPLAY_BUF 1
 
@@ -47,7 +47,6 @@ print_f:        pop     rax
                 mov     [saved_regs + saved.r9], r9
                 mov     [saved_regs + saved.rax], rax
 
-
                 call    printf wrt ..plt
 
                 mov     rdi, [saved_regs + saved.rdi]
@@ -73,7 +72,7 @@ print_f:        pop     rax
                 mov     rsi, [rbp + r8]
                 add     r8, STACK_STEP
 
-                lea     r9, [buf]                   ; r9 - buf to display text
+                lea     r9, [buf]                 ; r9 - buf to display text
 
             .read_loop:
                 cmp     byte [rsi], '%'
@@ -102,8 +101,12 @@ print_f:        pop     rax
                 inc     rsi
                 xor     rax, rax
                 mov     al, [rsi]
+                cmp     al, '%'
+                je      .to_percent
+
                 sub     al, 'b'
                 mov     rbx, [rbp + r8]
+
                 lea     r15, [jmp_table]
                 jmp     [r15 + rax*8]
             .spec_end:
@@ -127,28 +130,24 @@ print_f:        pop     rax
                 push    rax
                 ret
 
-.to_bin:        mov     rcx, 1
+.to_bin:        mov     rcx, 0x0101
                 call    convert_2_pow
                 jmp     .spec_end
 
-.to_char:       mov     rbx, [rbp + r8]
-                mov     [r9], rbx
+.to_char:       mov     [r9], rbx
                 inc     r9
                 jmp     .spec_end
 
-.to_dec:        lzcnt   rcx, rbx
-                sub     rcx, REG_BITS
-                neg     rcx
-                shl     rcx, 2
+.to_dec:        call    convert_10
                 jmp     .spec_end
 
-.to_float:
+.to_float:      jmp     .spec_end
 
-.to_oct:        mov     rcx, 3
+.to_oct:        mov     rcx, 0x0703
                 call    convert_2_pow
                 jmp     .spec_end
 
-.to_hex:        mov     rcx, 4
+.to_hex:        mov     rcx, 0x0f04
                 call    convert_2_pow
                 jmp     .spec_end
 
@@ -168,6 +167,10 @@ print_f:        pop     rax
                 mov     rsi, r12
                 jmp     .spec_end
 
+.to_percent:    mov     byte [r9], '%'
+                inc     r9
+                jmp     .spec_end
+
 ;-----------------------------------------------------------
 ; Descr: convert_2_pow converts a number to a string in a 
 ;        given base that is a power of 2
@@ -185,13 +188,12 @@ print_f:        pop     rax
 ; Destr: RAX, RCX, RDI, R10, R12, R13
 ;-----------------------------------------------------------
 
- convert_2_pow: mov     r13, -1
-                shl     r13, cl
-                not     r13
-
+convert_2_pow:  mov     r13, rcx
+                shr     r13, 4
+                
                 lea     rdi, [inter_buf]
                 xor     r12, r12
-               
+
             .inter_loop:
                 mov     rax, rbx
                 and     rax, r13
@@ -215,15 +217,81 @@ print_f:        pop     rax
 
                 lea     r15, [buf_end]
                 cmp     r9, r15
-                jne     .end_loop2
+                jne     .end_loop
 
                 mov     r10, rsi 
                 mDISPLAY_BUF BUF_LEN
                 mov     rsi, r10
                 lea     r9, [buf]
-            .end_loop2:
+            .end_loop:
                 loop    .final_loop
+
                 ret
+
+;-----------------------------------------------------------
+; Descr: convert_10 converts a signed 64-bit integer to its 
+;        decimal string representation
+;
+; Entry: RBX - number to convert (signed 64-bit integer)
+;        R9  - pointer to output buffer
+;        RSI - pointer to format string (used for buffer 
+;        flush)
+;
+; Assum: 
+;
+; Exit:  R9  - updated pointer to next position in output 
+;              buffer
+;        RSI - preserved (if buffer flush occurs)
+;
+; Destr: RAX, RCX, RDX, RDI, R10, R12, R15
+;-----------------------------------------------------------
+
+convert_10:     mov     r12, 0x7fffffffffffffff
+                cmp     rbx, r12
+                jna     .positive_num
+                
+                mov     [r9], '-'
+                inc     r9
+                neg     rbx
+
+            .positive_num:
+                mov     rdi, 10
+                mov     rax, rbx
+                xor     rdx, rdx
+                xor     rcx, rcx
+
+            .inter_loop:
+                cmp     rbx, 0
+                je      .final_loop
+
+                div     rdi
+                mov     rbx, rax
+                add     rdx, '0'
+                
+                push    rdx
+                xor     rdx, rdx
+                inc     rcx
+                jmp     .inter_loop
+
+            .final_loop:
+                pop     r12
+                mov     [r9], r12 
+                inc     r9
+
+                lea     r15, [buf_end]
+                cmp     r9, r15
+                jne     .end_loop
+
+                mov     r10, rsi 
+                mDISPLAY_BUF BUF_LEN
+                mov     rsi, r10
+                lea     r9, [buf]
+                
+            .end_loop:
+                loop    .final_loop
+
+                ret
+
 
 section         .data
 
@@ -258,4 +326,4 @@ struc           saved
 
 endstruc
 
-hex_table       db  "0123456789abcdf"
+hex_table       db  "0123456789abcdef"
