@@ -12,5 +12,7 @@ int main() {
     print_f("HELLO %d %d %d %d %d %d %d %d %d %d\n %d %s %x %d%c%b\n", 1, 2, 3, 4, 5,
                                                      6, 7, 8, -9, -10, -1, "love", 3802, 100, 33, 126);
     print_f("\nHello\n");
+
+    print_f("%y %% %b\n", 0b010101010101);
 }
 

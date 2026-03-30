@@ -62,15 +62,13 @@ print_f:        pop     rax
                 push    rcx 
                 push    rdx 
                 push    rsi 
-                push    rdi 
                 push    rax
 
                 push    rbp
                 mov     rbp, rsp
 
                 mov     r8, STACK_STEP*2          ; r8 - offset of arg in stack
-                mov     rsi, [rbp + r8]
-                add     r8, STACK_STEP
+                mov     rsi, rdi
 
                 lea     r9, [buf]                 ; r9 - buf to display text
 
@@ -104,16 +102,19 @@ print_f:        pop     rax
                 cmp     al, '%'
                 je      .to_percent
 
+                cmp     al, 'y'
+                jae     .default
+
                 sub     al, 'b'
                 mov     rbx, [rbp + r8]
 
                 lea     r15, [jmp_table]
                 jmp     [r15 + rax*8]
             .spec_end:
-                inc     rsi
                 add     r8, STACK_STEP
-                cmp     byte [rsi], 0
-                jne     .read_loop
+            .for_percent:    
+                inc     rsi
+                jmp     .read_loop
 
             .display_n_exit:
                 lea     r15, [buf]
@@ -126,7 +127,7 @@ print_f:        pop     rax
             .terminate:
                 pop     rbp
                 pop     rax
-                add     rsp, STACK_STEP*6
+                add     rsp, STACK_STEP*5
                 push    rax
                 ret
 
@@ -169,7 +170,11 @@ print_f:        pop     rax
 
 .to_percent:    mov     byte [r9], '%'
                 inc     r9
-                jmp     .spec_end
+                jmp     .for_percent
+
+.default:       mov     byte [r9], '%'
+                inc     r9
+                jmp     .read_loop
 
 ;-----------------------------------------------------------
 ; Descr: convert_2_pow converts a number to a string in a 
@@ -189,7 +194,7 @@ print_f:        pop     rax
 ;-----------------------------------------------------------
 
 convert_2_pow:  mov     r13, rcx
-                shr     r13, 4
+                shr     r13, 8
                 
                 lea     rdi, [inter_buf]
                 xor     r12, r12
@@ -298,13 +303,13 @@ section         .data
 jmp_table:      dq  print_f.to_bin    ;%b
                 dq  print_f.to_char   ;%c
                 dq  print_f.to_dec    ;%d 
-                    times 1 dq 0
+                    times 1 dq print_f.default
                 dq  print_f.to_float  ;%f
-                    times 8 dq 0
+                    times 8 dq print_f.default
                 dq  print_f.to_oct    ;%o
-                    times 3 dq 0
+                    times 3 dq print_f.default
                 dq  print_f.to_str    ;%s
-                    times 4 dq 0
+                    times 4 dq print_f.default
                 dq  print_f.to_hex    ;%x
 
 inter_buf           times 8 dq 0
